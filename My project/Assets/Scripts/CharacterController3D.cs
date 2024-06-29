@@ -15,8 +15,16 @@ public class CharacterController3D : MonoBehaviour
     private Rigidbody rb;
     private bool isGrounded;
 
+    private StateMachine stateMachine;
+    
+
     void Start()
     {
+        stateMachine = GetComponent<StateMachine>();
+
+        // Initialize with IdleState
+        stateMachine.ChangeState(new IdleState(gameObject));
+
         Cursor.lockState = CursorLockMode.Locked;
         rb = GetComponent<Rigidbody>();
         rb.freezeRotation = true;
@@ -37,6 +45,29 @@ public class CharacterController3D : MonoBehaviour
         Move();
         Jump();
         GroundCheck();
+
+        if (Input.GetButtonDown("Fire2"))
+        {
+            stateMachine.ChangeState(new FiringState(gameObject));
+        }
+        else if (Input.GetButtonDown("Jump") && isGrounded)
+        {
+            stateMachine.ChangeState(new JumpingState(gameObject, jumpForce));
+        }
+        else if (Input.GetAxis("Horizontal") != 0 || Input.GetAxis("Vertical") != 0)
+        {
+            if (!(stateMachine.CurrentState is MoveState))
+            {
+                stateMachine.ChangeState(new MoveState(gameObject, moveSpeed));
+            }
+        }
+        else
+        {
+            if (!(stateMachine.CurrentState is IdleState))
+            {
+                stateMachine.ChangeState(new IdleState(gameObject));
+            }
+        }
 
         if (Input.GetButtonDown("Fire2"))
         {
@@ -76,7 +107,7 @@ public class CharacterController3D : MonoBehaviour
         }
     }
 
-    private void FireProjectile()
+    public void FireProjectile()
     {
         if (projectilePrefab != null && firePoint != null)
         {
