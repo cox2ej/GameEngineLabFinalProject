@@ -4,19 +4,21 @@ public class CharacterController3D : MonoBehaviour
 {
     public float moveSpeed = 5f;
     public float jumpForce = 5f;
-    public float gravity = 9.81f;
     public float groundCheckDistance = 0.4f;
+    public float slopeForce = 5f;
+    public float slopeForceRayLength = 1.5f;
 
     public LayerMask groundMask;
 
     public GameObject projectilePrefab;
-    public Transform firePoint; // Point from where the projectile will be fired
+    public Transform firePoint;
 
     private Rigidbody rb;
     private bool isGrounded;
 
     private StateMachine stateMachine;
-    
+    private Vector3 moveDirection;
+    private Vector3 horizontalMove;
 
     void Start()
     {
@@ -38,16 +40,24 @@ public class CharacterController3D : MonoBehaviour
         {
             Debug.LogError("Fire Point is not assigned in the Inspector.");
         }
+
+        if (PlayerUnlocksProjectile.instance == null)
+        {
+            Debug.LogError("PlayerUnlocksProjectile instance is not initialized.");
+        }
     }
 
     void Update()
     {
-        Move();
-        Jump();
+        HandleInput();
         GroundCheck();
+    }
 
-        if (Input.GetButtonDown("Fire2"))
+    private void HandleInput()
+    {
+        if (Input.GetButtonDown("Fire2") && PlayerUnlocksProjectile.instance.projectileAbilityUnlocked)
         {
+            FireProjectile();
             stateMachine.ChangeState(new FiringState(gameObject));
         }
         else if (Input.GetButtonDown("Jump") && isGrounded)
@@ -68,22 +78,37 @@ public class CharacterController3D : MonoBehaviour
                 stateMachine.ChangeState(new IdleState(gameObject));
             }
         }
-
-        if (Input.GetButtonDown("Fire2"))
-        {
-            FireProjectile();
-        }
     }
 
-        private void Move()
+    private void FixedUpdate()
+    {
+        Move();
+        ApplyGravity();
+    }
+
+    private void Move()
     {
         float moveX = Input.GetAxis("Horizontal");
         float moveZ = Input.GetAxis("Vertical");
 
-        Vector3 moveDirection = transform.right * moveX + transform.forward * moveZ;
-        Vector3 newPosition = rb.position + moveDirection * moveSpeed * Time.deltaTime;
+        moveDirection = transform.right * moveX + transform.forward * moveZ;
+        horizontalMove = moveDirection * moveSpeed * Time.fixedDeltaTime;
 
-        rb.MovePosition(newPosition);
+        rb.MovePosition(rb.position + horizontalMove);
+
+        if (OnSlope() && moveDirection != Vector3.zero)
+        {
+            rb.AddForce(Vector3.up * slopeForce);
+        }
+    }
+
+    private void ApplyGravity()
+    {
+        if (!isGrounded)
+        {
+            Vector3 gravityVector = Vector3.down * Physics.gravity.y * Time.fixedDeltaTime;
+            rb.AddForce(gravityVector, ForceMode.Acceleration);
+        }
     }
 
     private void Jump()
@@ -99,12 +124,20 @@ public class CharacterController3D : MonoBehaviour
         isGrounded = Physics.Raycast(transform.position, Vector3.down, groundCheckDistance, groundMask);
     }
 
-    private void FixedUpdate()
+    private bool OnSlope()
     {
-        if (!isGrounded)
+        if (isGrounded)
         {
-            rb.AddForce(Vector3.down * gravity * rb.mass);
+            RaycastHit hit;
+            if (Physics.Raycast(transform.position, Vector3.down, out hit, slopeForceRayLength))
+            {
+                if (hit.normal != Vector3.up)
+                {
+                    return true;
+                }
+            }
         }
+        return false;
     }
 
     public void FireProjectile()
