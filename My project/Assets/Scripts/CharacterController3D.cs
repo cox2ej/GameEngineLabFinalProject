@@ -2,153 +2,70 @@ using UnityEngine;
 
 public class CharacterController3D : MonoBehaviour
 {
-    public float moveSpeed = 5f;
-    public float jumpForce = 5f;
-    public float groundCheckDistance = 0.4f;
-    public float slopeForce = 5f;
-    public float slopeForceRayLength = 1.5f;
-
-    public LayerMask groundMask;
-
-    public GameObject projectilePrefab;
-    public Transform firePoint;
-
+    public float speed = 5.0f;
+    public float jumpForce = 5.0f;
+    public float dashForce = 10f;
+    public float dashCooldown = 2f;
+    public Transform cameraTransform;
     private Rigidbody rb;
-    private bool isGrounded;
 
-    private StateMachine stateMachine;
-    private Vector3 moveDirection;
-    private Vector3 horizontalMove;
-
+    private float lastDashTime;
     void Start()
     {
-        stateMachine = GetComponent<StateMachine>();
-
-        // Initialize with IdleState
-        stateMachine.ChangeState(new IdleState(gameObject));
-
-        Cursor.lockState = CursorLockMode.Locked;
         rb = GetComponent<Rigidbody>();
-        rb.freezeRotation = true;
-
-        if (projectilePrefab == null)
-        {
-            Debug.LogError("Projectile Prefab is not assigned in the Inspector.");
-        }
-
-        if (firePoint == null)
-        {
-            Debug.LogError("Fire Point is not assigned in the Inspector.");
-        }
-
-        if (PlayerUnlocksProjectile.instance == null)
-        {
-            Debug.LogError("PlayerUnlocksProjectile instance is not initialized.");
-        }
     }
 
     void Update()
     {
-        HandleInput();
-        GroundCheck();
-    }
-
-    private void HandleInput()
-    {
-        if (Input.GetButtonDown("Fire2") && PlayerUnlocksProjectile.instance.projectileAbilityUnlocked)
-        {
-            FireProjectile();
-            stateMachine.ChangeState(new FiringState(gameObject));
-        }
-        else if (Input.GetButtonDown("Jump") && isGrounded)
-        {
-            stateMachine.ChangeState(new JumpingState(gameObject, jumpForce));
-        }
-        else if (Input.GetAxis("Horizontal") != 0 || Input.GetAxis("Vertical") != 0)
-        {
-            if (!(stateMachine.CurrentState is MoveState))
-            {
-                stateMachine.ChangeState(new MoveState(gameObject, moveSpeed));
-            }
-        }
-        else
-        {
-            if (!(stateMachine.CurrentState is IdleState))
-            {
-                stateMachine.ChangeState(new IdleState(gameObject));
-            }
-        }
-    }
-
-    private void FixedUpdate()
-    {
         Move();
-        ApplyGravity();
-    }
-
-    private void Move()
-    {
-        float moveX = Input.GetAxis("Horizontal");
-        float moveZ = Input.GetAxis("Vertical");
-
-        moveDirection = transform.right * moveX + transform.forward * moveZ;
-        horizontalMove = moveDirection * moveSpeed * Time.fixedDeltaTime;
-
-        rb.MovePosition(rb.position + horizontalMove);
-
-        if (OnSlope() && moveDirection != Vector3.zero)
+        Jump();
+        if (GameManager.Instance.isDashUnlocked)
         {
-            rb.AddForce(Vector3.up * slopeForce);
+            Dash();
         }
     }
 
-    private void ApplyGravity()
+    void Move()
     {
-        if (!isGrounded)
-        {
-            Vector3 gravityVector = Vector3.down * Physics.gravity.y * Time.fixedDeltaTime;
-            rb.AddForce(gravityVector, ForceMode.Acceleration);
-        }
+        // Get input from user
+        float moveHorizontal = Input.GetAxis("Horizontal");
+        float moveVertical = Input.GetAxis("Vertical");
+
+        // Get camera forward and right directions
+        Vector3 forward = cameraTransform.forward;
+        Vector3 right = cameraTransform.right;
+
+        // Normalize the forward and right vectors
+        forward.y = 0f;
+        right.y = 0f;
+        forward.Normalize();
+        right.Normalize();
+
+        // Calculate the desired movement direction
+        Vector3 desiredMoveDirection = (forward * moveVertical + right * moveHorizontal).normalized;
+
+        // Apply movement to the character
+        Vector3 movement = desiredMoveDirection * speed;
+
+        Vector3 newVelocity = new Vector3(movement.x, rb.velocity.y, movement.z);
+        rb.velocity = newVelocity;
     }
 
-    private void Jump()
+    void Jump()
     {
-        if (Input.GetButtonDown("Jump") && isGrounded)
+        if (Input.GetButtonDown("Jump") && Mathf.Abs(rb.velocity.y) < 0.001f)
         {
             rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
         }
     }
 
-    private void GroundCheck()
+    private void Dash()
     {
-        isGrounded = Physics.Raycast(transform.position, Vector3.down, groundCheckDistance, groundMask);
-    }
-
-    private bool OnSlope()
-    {
-        if (isGrounded)
+        if (Input.GetKeyDown(KeyCode.LeftShift) && Time.time > lastDashTime + dashCooldown)
         {
-            RaycastHit hit;
-            if (Physics.Raycast(transform.position, Vector3.down, out hit, slopeForceRayLength))
-            {
-                if (hit.normal != Vector3.up)
-                {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    public void FireProjectile()
-    {
-        if (projectilePrefab != null && firePoint != null)
-        {
-            Instantiate(projectilePrefab, firePoint.position, firePoint.rotation);
-        }
-        else
-        {
-            Debug.LogWarning("Projectile Prefab or Fire Point is missing.");
+            Debug.Log("dash");
+            rb.AddForce(transform.forward * dashForce, ForceMode.Impulse);
+            lastDashTime = Time.time;
         }
     }
 }
